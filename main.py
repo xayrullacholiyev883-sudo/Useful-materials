@@ -1,35 +1,40 @@
 import os
 import asyncio
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from aiogram import Bot, Dispatcher, types, executor
+import logging
+from aiohttp import web
+from aiogram import Bot, Dispatcher, types
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 
-# O'zingizning haqiqiy bot tokeningizni qo'shtirnoq ichiga yozing
+# Tokeningizni qo'shtirnoq ichiga yozing
 API_TOKEN = "8938280108:AAEkHbfii44vTJlvIR9rhfeoEZ9oA-4Hr04"
 
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+# Render uchun oddiy veb-server (port talabini bajarish uchun)
+async def handle(request):
+    return web.Response(text="Bot is alive and running 24/7!")
 
-# Render uchun veb-server (Port ochish talabini bajaradi)
-class SimpleHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is alive and running 24/7!")
-
-def run_server():
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
     port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
-    server.serve_forever()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
 
-# Veb-serverni orqa fonda ishga tushiramiz
-threading.Thread(target=run_server, daemon=True).start()
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    
+    bot = Bot(token=API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    dp = Dispatcher()
 
-# Oddiy start buyrug'i
-@dp.message_handler(commands=['start'])
-async def send_welcome(message: types.Message):
-    await message.reply("Assalomu alaykum! Botimiz 24/7 rejimda muvaffaqiyatli ishga tushdi! 🚀")
+    @dp.message(lambda message: message.text == "/start")
+    async def command_start_handler(message: types.Message) -> None:
+        await message.answer("Assalomu alaykum! Bot 24/7 rejimda muvaffaqiyatli ishga tushdi! 🚀")
+
+    # Veb-server va botni bir vaqtda ishga tushiramiz
+    await start_web_server()
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    print("Bot tayyor va ishga tushmoqda...")
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
