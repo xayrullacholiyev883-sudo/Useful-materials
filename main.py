@@ -1,4 +1,4 @@
-startororororor asyncio
+ asyncio
 try:
     asyncio.get_running_loop()
 except RuntimeError:
