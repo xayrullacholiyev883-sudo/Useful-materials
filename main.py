@@ -68,6 +68,6 @@ async def sections_handler(message: types.Message):
 if __name__ == "__main__":
     from aiogram import executor
     print("Bot tayyor!")
-    executor.start_polling(dp)
+    pollingling(dp)
 
-~ 
+
