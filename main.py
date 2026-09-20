@@ -75,13 +75,11 @@ async def about_me(message: types.Message):
     text = (
         "ℹ️ **About Me**\n\n"
         "Ushbu bot ingliz tilini o'rganuvchilar uchun barcha kerakli materiallarni jamlash maqsadida yaratilgan.\n\n"
-        f"Loyiha muallifi / Admin: {MY_TELEGRAM}"
+        f"Loyiha muallifi / Admin: "@narzullayevich_2010"
     )
     await message.reply(text, parse_mode="Markdown")
 
 # Biz bilan bog'lanish bo'limi
-@dp.message_handler(lambda message: message.text == "📞 Biz bilan bog'lanish")
-Savol_va_takliflar = lambda message: None # placeholder
 @dp.message_handler(lambda message: message.text == "📞 Biz bilan bog'lanish")
 async def contact_us(message: types.Message):
     text = (
@@ -103,7 +101,6 @@ async def show_materials(message: types.Message):
     
     await message.reply(f"📂 <b>{section}</b> bo'limidagi materiallar:", parse_mode="HTML")
     
-    # Bo'limdagi barcha fayl va videolarni ketma-ket yuborib chiqadi
     for item in items:
         file_id = item['file_id']
         file_type = item['type']
@@ -140,7 +137,7 @@ async def process_callback_admin(callback_query: types.CallbackQuery, state: FSM
     await bot.answer_callback_query(callback_query.id)
     await bot.send_message(
         callback_query.from_user.id, 
-        f"<b>{section}</b> uchun fayl, video yoki rasm yuboring.\n<i>(Pastiga o'z izohingizni va muallifni yozib yuborishingiz mumkin, u o'sha holda saqlanadi)</i>", 
+        f"<b>{section}</b> uchun fayl, video yoki rasm yuboring.\n<i>(Pastiga o'z izohingizni va muallifni yozib yuborishingiz mumkin)</i>", 
         parse_mode="HTML"
     )
     await AdminStates.waiting_for_material.set()
@@ -166,3 +163,4 @@ async def save_material(message: types.Message, state: FSMContext):
 if __name__ == "__main__":
     print("Bot ishga tushmoqda...")
     executor.start_polling(dp, skip_updates=True)
+
