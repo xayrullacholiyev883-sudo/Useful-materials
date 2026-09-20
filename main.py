@@ -6,20 +6,14 @@ from aiogram.contrib.fsm.storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-# O'zingizning bot tokeningizni yozing
 API_TOKEN = "8938280108:AAEkHbfii44vTJlvIR9rhfeoEZ9oA-4Hr04"
-
-# O'zingizning Telegram ID raqamingizni yozing (Faqat siz admin bo'lasiz)
-ADMIN_ID = 8243336938  # O'z ID raqamingiz bilan almashtiring!
-
-# Sizning Telegram username'ingiz (Bog'lanish uchun)
+ADMIN_ID = 8243336938
 MY_TELEGRAM = "@narzullayevich_2010"
 
 storage = MemoryStorage()
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot, storage=storage)
 
-# Har bir bo'lim uchun ro'yxat (Bir nechta fayl saqlash uchun)
 materials = {
     "📖 Reading": [],
     "🎧 Listening": [],
@@ -35,7 +29,6 @@ materials = {
 class AdminStates(StatesGroup):
     waiting_for_material = State()
 
-# --- RENDER PORT SERVERI ---
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -48,9 +41,7 @@ def run_server():
     server.serve_forever()
 
 threading.Thread(target=run_server, daemon=True).start()
-# --------------------------
 
-# Asosiy menyu
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -69,51 +60,32 @@ async def send_welcome(message: types.Message):
     )
     await message.reply("Assalomu alaykum! English Materials botimizga xush kelibsiz. Kerakli bo'limni tanlang:", reply_markup=markup)
 
-# About Me bo'limi
 @dp.message_handler(lambda message: message.text == "ℹ️ About Me")
 async def about_me(message: types.Message):
-    text = (
-        "ℹ️ **About Me**\n\n"
-        "Ushbu bot ingliz tilini o'rganuvchilar uchun barcha kerakli materiallarni jamlash maqsadida yaratilgan.\n\n"
-        f"Loyiha muallifi / Admin: "@narzullayevich_2010"
-    )
+    text = f"ℹ️ **About Me**\n\nUshbu bot ingliz tilini o'rganuvchilar uchun yaratilgan.\nLoyiha muallifi / Admin: {MY_TELEGRAM}"
     await message.reply(text, parse_mode="Markdown")
 
-# Biz bilan bog'lanish bo'limi
 @dp.message_handler(lambda message: message.text == "📞 Biz bilan bog'lanish")
 async def contact_us(message: types.Message):
-    text = (
-        "📞 **Biz bilan bog'lanish**\n\n"
-        "Savollar, takliflar yoki reklama bo'yicha murojaat qilish uchun quyidagi manzilga yozishingiz mumkin:\n\n"
-        f"👉 Admin bilan bog'lanish: @narzullayevich_2010"
-    )
+    text = f"📞 **Biz bilan bog'lanish**\n\nAdmin bilan bog'lanish uchun: {MY_TELEGRAM}"
     await message.reply(text, parse_mode="Markdown")
 
-# Foydalanuvchi bo'limni bosganda saqlangan BARCHA materiallarni chiqarish
 @dp.message_handler(lambda message: message.text in materials.keys())
 async def show_materials(message: types.Message):
     section = message.text
     items = materials[section]
     
     if not items:
-        await message.reply(f"Hozircha <b>{section}</b> bo'limiga ma'lumot qo'shilmagan. Tez orada qo'shiladi!", parse_mode="HTML")
+        await message.reply(f"Hozircha <b>{section}</b> bo'limiga ma'lumot qo'shilmagan.", parse_mode="HTML")
         return
     
-    await message.reply(f"📂 <b>{section}</b> bo'limidagi materiallar:", parse_mode="HTML")
-    
     for item in items:
-        file_id = item['file_id']
-        file_type = item['type']
-        caption = item['caption']
-        
-        if file_type == 'document':
-            await bot.send_document(message.chat.id, file_id, caption=caption)
-        elif file_type == 'video':
-            await bot.send_video(message.chat.id, file_id, caption=caption)
-        elif file_type == 'photo':
-            await bot.send_photo(message.chat.id, file_id, caption=caption)
-
-# --- ADMIN PANEL ---
+        if item['type'] == 'document':
+            await bot.send_document(message.chat.id, item['file_id'], caption=item['caption'])
+        elif item['type'] == 'video':
+            await bot.send_video(message.chat.id, item['file_id'], caption=item['caption'])
+        elif item['type'] == 'photo':
+            await bot.send_photo(message.chat.id, item['file_id'], caption=item['caption'])
 
 @dp.message_handler(commands=['admin'])
 async def admin_panel(message: types.Message):
@@ -130,16 +102,10 @@ async def admin_panel(message: types.Message):
 @dp.callback_query_handler(lambda c: c.data.startswith('add_'))
 async def process_callback_admin(callback_query: types.CallbackQuery, state: FSMContext):
     section = callback_query.data.replace('add_', '')
-    
     async with state.proxy() as data:
         data['section'] = section
-        
     await bot.answer_callback_query(callback_query.id)
-    await bot.send_message(
-        callback_query.from_user.id, 
-        f"<b>{section}</b> uchun fayl, video yoki rasm yuboring.\n<i>(Pastiga o'z izohingizni va muallifni yozib yuborishingiz mumkin)</i>", 
-        parse_mode="HTML"
-    )
+    await bot.send_message(callback_query.from_user.id, f"<b>{section}</b> uchun fayl yoki video yuboring:", parse_mode="HTML")
     await AdminStates.waiting_for_material.set()
 
 @dp.message_handler(state=AdminStates.waiting_for_material, content_types=['document', 'video', 'photo'])
@@ -156,11 +122,8 @@ async def save_material(message: types.Message, state: FSMContext):
     elif message.photo:
         materials[section].append({'file_id': message.photo[-1].file_id, 'type': 'photo', 'caption': caption})
     
-    count = len(materials[section])
-    await message.reply(f"Muvaffaqiyatli qo'shildi! Hozirda '{section}' bo'limida jami {count} ta material bor.")
+    await message.reply("Muvaffaqiyatli qo'shildi!")
     await state.finish()
 
 if __name__ == "__main__":
-    print("Bot ishga tushmoqda...")
     executor.start_polling(dp, skip_updates=True)
-
