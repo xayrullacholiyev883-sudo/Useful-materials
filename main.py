@@ -1,4 +1,4 @@
-import asyncio
+startororororor asyncio
 try:
     asyncio.get_running_loop()
 except RuntimeError:
@@ -68,6 +68,23 @@ async def sections_handler(message: types.Message):
 if __name__ == "__main__":
     from aiogram import executor
     print("Bot tayyor!")
+import os
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+    server.serve_forever()
+
+# Veb-serverni alohida oqimda ishga tushiramiz
+threading.Thread(target=run_server, daemon=True).start()
 executor.start_polling(dp)
 
 
