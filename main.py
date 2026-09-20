@@ -70,4 +70,4 @@ if __name__ == "__main__":
     print("Bot tayyor!")
     executor.start_polling(dp)
 
-~ $
+~ 
