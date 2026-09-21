@@ -1,5 +1,6 @@
 import os
 import asyncio
+import sqlite3
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
@@ -14,11 +15,48 @@ bot = Bot(token=BOT_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-# --- BAZA (Xotirada saqlash) ---
-materials_db = {
-    "Reading": [], "Writing": [], "Listening": [], "Speaking": [],
-    "Vocabulary": [], "Grammar": [], "CEFR": [], "Real Exam": [], "Useful": []
-}
+# --- BAZA (SQLite) ---
+def init_db():
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS materials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT,
+            file_type TEXT,
+            file_id TEXT,
+            caption TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def get_materials_by_cat(cat_name):
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, file_type, file_id, caption FROM materials WHERE category = ?", (cat_name,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def add_material(cat_name, file_type, file_id, caption):
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO materials (category, file_type, file_id, caption) VALUES (?, ?, ?, ?)",
+                   (cat_name, file_type, file_id, caption))
+    conn.commit()
+    conn.close()
+
+def delete_material_by_id(item_id):
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM materials WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+
+CATEGORIES = ["Reading", "Writing", "Listening", "Speaking", "Vocabulary", "Grammar", "CEFR", "Real Exam", "Useful"]
 
 # --- FSM (Holatlar) ---
 class AdminStates(StatesGroup):
@@ -35,7 +73,7 @@ def get_main_keyboard(user_id: int):
 
 def get_categories_keyboard(prefix="cat_"):
     kb = types.InlineKeyboardMarkup(row_width=1)
-    for cat in materials_db.keys():
+    for cat in CATEGORIES:
         text = f"➕ {cat}" if prefix == "admin_" else cat
         kb.add(types.InlineKeyboardButton(text=text, callback_data=f"{prefix}{cat}"))
     return kb
@@ -51,7 +89,7 @@ def get_admin_action_keyboard(cat_name: str):
 
 # --- WEB SERVER (Render uchun) ---
 async def handle(request):
-    return web.Response(text="Bot is running live 24/7!")
+    return web.Response(text="Bot is running live 24/7 with SQLite database!")
 
 async def start_web_server():
     app = web.Application()
@@ -87,16 +125,16 @@ async def show_materials(message: types.Message):
 @dp.callback_query_handler(lambda c: c.data and c.data.startswith("cat_"), state="*")
 async def process_category_select(callback: types.CallbackQuery):
     cat_name = callback.data.split("cat_")[1]
-    items = materials_db.get(cat_name, [])
+    items = get_materials_by_cat(cat_name)
     if not items:
         await callback.message.answer(f"Hozircha {cat_name} bo'limida materiallar yo'q.")
     else:
         await callback.message.answer(f"<b>{cat_name}</b> bo'limidagi materiallar:", parse_mode="HTML")
-        for item in items:
-            if item["type"] == "file":
-                await callback.message.answer_document(document=item["file_id"], caption=item["caption"])
-            elif item["type"] == "video":
-                await callback.message.answer_video(video=item["file_id"], caption=item["caption"])
+        for item_id, f_type, f_id, caption in items:
+            if f_type == "file":
+                await callback.message.answer_document(document=f_id, caption=caption)
+            elif f_type == "video":
+                await callback.message.answer_video(video=f_id, caption=caption)
     await callback.answer()
 
 # --- ADMIN PANEL ---
@@ -124,37 +162,31 @@ async def list_files_for_delete(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         return
     cat_name = callback.data.split("list_delete_")[1]
-    items = materials_db.get(cat_name, [])
+    items = get_materials_by_cat(cat_name)
     
     if not items:
         await callback.message.answer(f"<b>{cat_name}</b> bo'limida o'chirish uchun fayllar yo'q.", parse_mode="HTML")
     else:
         await callback.message.answer(f"🗑 <b>{cat_name}</b> bo'limidagi fayllar ro'yxati:", parse_mode="HTML")
-        for index, item in enumerate(items):
+        for item_id, f_type, f_id, caption in items:
             del_kb = types.InlineKeyboardMarkup()
-            del_kb.add(types.InlineKeyboardButton(text="❌ Ushbu faylni o'chirish", callback_data=f"del_{cat_name}_{index}"))
+            del_kb.add(types.InlineKeyboardButton(text="❌ Ushbu faylni o'chirish", callback_data=f"del_{item_id}"))
             
-            if item["type"] == "file":
-                await callback.message.answer_document(document=item["file_id"], caption=item["caption"], reply_markup=del_kb)
-            elif item["type"] == "video":
-                await callback.message.answer_video(video=item["file_id"], caption=item["caption"], reply_markup=del_kb)
+            if f_type == "file":
+                await callback.message.answer_document(document=f_id, caption=caption, reply_markup=del_kb)
+            elif f_type == "video":
+                await callback.message.answer_video(video=f_id, caption=caption, reply_markup=del_kb)
     await callback.answer()
 
-# --- FAYLNI BITTALAB O'CHIRISH HANDLERI ---
+# --- FAYLNI O'CHIRISH HANDLERI ---
 @dp.callback_query_handler(lambda c: c.data and c.data.startswith("del_"), state="*")
 async def delete_single_file(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         return
-    parts = callback.data.split("_")
-    cat_name = parts[1]
-    index = int(parts[2])
-    
-    if index < len(materials_db[cat_name]):
-        removed_item = materials_db[cat_name].pop(index)
-        await callback.message.answer(f"✅ <b>{removed_item['caption']}</b> fayli muvaffaqiyatli o'chirildi!", parse_mode="HTML")
-        await callback.message.delete()
-    else:
-        await callback.message.answer("⚠️ Fayl allaqachon o'chirilgan yoki topilmadi.")
+    item_id = int(callback.data.split("del_")[1])
+    delete_material_by_id(item_id)
+    await callback.message.answer("✅ Fayl bazadan muvaffaqiyatli o'chirildi!", parse_mode="HTML")
+    await callback.message.delete()
     await callback.answer()
 
 @dp.callback_query_handler(lambda c: c.data and c.data.startswith("type_"), state="*")
@@ -194,13 +226,9 @@ async def process_file(message: types.Message, state: FSMContext):
     
     file_id = message.document.file_id if message.document else message.video.file_id
     
-    materials_db[cat_name].append({
-        "type": file_type,
-        "file_id": file_id,
-        "caption": caption
-    })
+    add_material(cat_name, file_type, file_id, caption)
     
-    await message.answer("✅ Material muvaffaqiyatli saqlandi!")
+    await message.answer("✅ Material baza xotirasida muvaffaqiyatli saqlandi!")
     
     if file_type == "file":
         await message.answer_document(document=file_id, caption=caption)
