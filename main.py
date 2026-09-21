@@ -2,15 +2,15 @@ import logging
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# Siz taqdim etgan ma'lumotlar
-API_TOKEN = "8938280108:AAGheXH5WPb9m4c00o0rKmmzNSJMBagJDJA"
+# Yangi token va admin ma'lumotlari
+API_TOKEN = "8938280108:AAHkpp0c3WK98v-Vj33fpjSfggtzX3GQXfg"
 ADMIN_ID = 8243336938
 ADMIN_USERNAME = "narzullayevich_2010"
 
 # Majburiy obuna kanallari (Hozircha bo'sh, reklama uchun /addchan ishlatasiz)
 REQUIRED_CHANNELS = []
 
-# Ma'lumotlar bazasi: Har bir element {"file_id": "...", "title": "..."} ko'rinishida saqlanadi
+# Ma'lumotlar bazasi: 10 ta qism uchun fayl va videolar
 DATABASE = {
     "reading_files": [], "reading_videos": [],
     "writing_files": [], "writing_videos": [],
@@ -239,7 +239,7 @@ async def process_about(callback: types.CallbackQuery):
     await callback.message.answer("ℹ️ **About Me**\nUshbu bot ingliz tilini o'rganuvchilar uchun maxsus materiallar taqdim etish va 24/7 xizmat ko'rsatish uchun yaratilgan.")
     await callback.answer()
 
-# Reklama kanallarini boshqarish
+# Reklama kanallarini boshqarish buyruqlari
 @dp.message_handler(commands=['addchan'])
 async def add_channel(message: types.Message):
     if message.from_user.id != ADMIN_ID: return
