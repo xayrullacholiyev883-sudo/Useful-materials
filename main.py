@@ -3,7 +3,7 @@ from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Siz taqdim etgan ma'lumotlar
-API_TOKEN = "8938280108:AAHRftEIUXStQdjY4q90-zFMIo5tH3XAzys"  # O'z tokeningizni yozing
+API_TOKEN = "8938280108:AAG3j4pmmhAnFtp1r91I4bp8Gx19RU5xqio"  # O'z tokeningizni yozing
 ADMIN_ID = 8243336938
 ADMIN_USERNAME = "narzullayevich_2010"
 
