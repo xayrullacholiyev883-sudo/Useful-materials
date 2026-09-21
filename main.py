@@ -7,7 +7,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiohttp import web
 
 # --- SOZLAMALAR ---
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8938280108:AAEsADtH0GzJpfelsCPm-f2QpYJMMM998mQ")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8938280108:AAFSd0eNBbGC1t9On-tOmarLUx5kWiQ9Rwk")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8243336938"))
 ADMIN_USERNAME = "@narzullayevich_2010"
 STORAGE_CHANNEL_ID = -1003662758278  # Doimiy saqlash uchun yopiq kanal ID raqami
@@ -17,7 +17,6 @@ storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
 # Materiallarni vaqtincha xotirada saqlash strukturasi (Kanal ID orqali ishlaydi)
-# Format: { category_name: [ {id, file_type, file_id, caption, message_id}, ... ] }
 materials_db = {
     "Reading": [],
     "Writing": [],
@@ -174,7 +173,6 @@ async def delete_single_file(callback: types.CallbackQuery):
     for cat in materials_db:
         for item in materials_db[cat]:
             if item["id"] == target_id:
-                # Kanaldagi xabarni ham o'chirib yuborishga harakat qilamiz
                 try:
                     await bot.delete_message(chat_id=STORAGE_CHANNEL_ID, message_id=item["message_id"])
                 except:
@@ -205,7 +203,6 @@ async def admin_type_click(callback: types.CallbackQuery, state: FSMContext):
     await AdminStates.waiting_for_caption.set()
     await callback.answer()
 
-# 1. Avval izoh matnini qabul qilish
 @dp.message_handler(state=AdminStates.waiting_for_caption, content_types=types.ContentTypes.TEXT)
 async def process_caption(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -217,7 +214,6 @@ async def process_caption(message: types.Message, state: FSMContext):
     await message.answer(f"2-qadam: Endi {f_type} yuboring:")
     await AdminStates.waiting_for_file.set()
 
-# 2. Keyin fayl yoki videoni kanalga nusxalab saqlash
 @dp.message_handler(state=AdminStates.waiting_for_file, content_types=[types.ContentType.DOCUMENT, types.ContentType.VIDEO])
 async def process_file(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -231,7 +227,6 @@ async def process_file(message: types.Message, state: FSMContext):
     
     file_id = message.document.file_id if message.document else message.video.file_id
     
-    # Faylni xavfsizlik uchun yopiq kanalga yuborib qo'shamiz
     try:
         if file_type == "file":
             sent_msg = await bot.send_document(chat_id=STORAGE_CHANNEL_ID, document=file_id, caption=f"[{cat_name}] {caption}")
