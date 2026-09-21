@@ -8,8 +8,8 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiohttp import web
 
 # --- SOZLAMALAR ---
-BOT_TOKEN =  "8938280108:AAEfLcyHub_hokl3LS7KM_hujT8ZrWTD-t0")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "8243336938"))
+BOT_TOKEN = "8938280108:AAEfLcyHub_hokl3LS7KM_hujT8ZrWTD-t0"
+ADMIN_ID = 8243336938
 ADMIN_USERNAME = "@narzullayevich_2010"
 STORAGE_CHANNEL_ID = -1003662758278  # Doimiy saqlash uchun yopiq kanal ID raqami
 
@@ -202,7 +202,7 @@ async def delete_single_file(callback: types.CallbackQuery):
                 except:
                     pass
                 materials_db[cat].remove(item)
-                save_db()  # O'chirilgach bazani yangilash
+                save_db()
                 deleted = True
                 break
         if deleted:
@@ -267,7 +267,7 @@ async def process_file(message: types.Message, state: FSMContext):
             "message_id": sent_msg.message_id
         })
         
-        save_db()  # Yangi fayl qo'shilganda bazaga saqlash
+        save_db()
         
         await message.answer("✅ Material yopiq kanalga va botga muvaffaqiyatli saqlandi!")
         
