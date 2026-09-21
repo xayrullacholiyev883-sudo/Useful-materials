@@ -1,9 +1,11 @@
 import logging
+import asyncio
+from aiohttp import web
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Yangi token va admin ma'lumotlari
-API_TOKEN = "8938280108:AAHkpp0c3WK98v-Vj33fpjSfggtzX3GQXfg"
+API_TOKEN = "8938280108:AAH4fqaIPRnbnwGwws8_Dq-dSN9Erd-y0n8"
 ADMIN_ID = 8243336938
 ADMIN_USERNAME = "narzullayevich_2010"
 
@@ -28,6 +30,19 @@ ADMIN_STATE = {}
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
+
+# Render uchun kichik web-server (Port xatosining oldini olish uchun)
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+app = web.Application()
+app.router.add_get("/", handle)
+
+async def web_server():
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 10000)
+    await site.start()
 
 async def check_subscriptions(user_id: int):
     if not REQUIRED_CHANNELS:
@@ -257,4 +272,6 @@ async def del_channel(message: types.Message):
         await message.reply(f"🗑 {args} o'chirildi!")
 
 if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.create_task(web_server())
     executor.start_polling(dp, skip_updates=True)
