@@ -1,277 +1,225 @@
+import os
 import logging
 import asyncio
 from aiohttp import web
 from aiogram import Bot, Dispatcher, executor, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 
-# Yangi token va admin ma'lumotlari
-API_TOKEN = "8938280108:AAH4fqaIPRnbnwGwws8_Dq-dSN9Erd-y0n8"
+API_TOKEN = '8938280108:AAEC4Bnkvf2PW1xdjRyhKa2qkpdY6n-dN-0'
 ADMIN_ID = 8243336938
-ADMIN_USERNAME = "narzullayevich_2010"
-
-# Majburiy obuna kanallari (Hozircha bo'sh, reklama uchun /addchan ishlatasiz)
-REQUIRED_CHANNELS = []
-
-# Ma'lumotlar bazasi: 10 ta qism uchun fayl va videolar
-DATABASE = {
-    "reading_files": [], "reading_videos": [],
-    "writing_files": [], "writing_videos": [],
-    "listening_files": [], "listening_videos": [],
-    "speaking_files": [], "speaking_videos": [],
-    "vocabulary_files": [], "vocabulary_videos": [],
-    "grammar_files": [], "grammar_videos": [],
-    "cefr_files": [], "cefr_videos": [],
-    "exam_files": [], "exam_videos": [],          # Real exam's materials uchun
-    "materials_files": [], "materials_videos": []
-}
-
-ADMIN_STATE = {}
+ADMIN_USERNAME = "@narzullayevich_2010"
 
 logging.basicConfig(level=logging.INFO)
+
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# Render uchun kichik web-server (Port xatosining oldini olish uchun)
-async def handle(request):
-    return web.Response(text="Bot is running!")
+# Ma'lumotlar xotirasi (RAM)
+database = {
+    'reading': {'files': [], 'videos': []},
+    'writing': {'files': [], 'videos': []},
+    'listening': {'files': [], 'videos': []},
+    'speaking': {'files': [], 'videos': []},
+    'vocabulary': {'files': [], 'videos': []},
+    'grammar': {'files': [], 'videos': []},
+    'cefr': {'files': [], 'videos': []},
+    'exam': {'files': [], 'videos': []},
+    'useful': {'files': [], 'videos': []}
+}
 
-app = web.Application()
-app.router.add_get("/", handle)
+channels = []
+user_states = {}
+
+# --- RENDER DUMMY WEB SERVER ---
+async def handle(request):
+    return web.Response(text="Bot runs 24/7 successfully!")
 
 async def web_server():
+    app = web.Application()
+    app.router.add_get('/', handle)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 10000)
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
-async def check_subscriptions(user_id: int):
-    if not REQUIRED_CHANNELS:
-        return True
-    for channel in REQUIRED_CHANNELS:
-        try:
-            member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
-            if member.status not in ["member", "administrator", "creator"]:
-                return False
-        except Exception:
-            return False
-    return True
+# --- MENYU BUYRUQLARINI SOZLASH (Menu tugmasi uchun) ---
+async def set_default_commands(dp):
+    await dp.bot.set_my_commands([
+        BotCommand("start", "🤖 Botni qayta ishga tushirish"),
+        BotCommand("admin", "⚙️ Admin panel (Faqat admin uchun)"),
+        BotCommand("addchan", "➕ Reklama kanalini qo'shish"),
+        BotCommand("delchan", "➖ Reklama kanalini olib tashlash")
+    ])
 
-def get_main_menu():
+# --- MENYULAR ---
+def get_main_keyboard():
     keyboard = InlineKeyboardMarkup(row_width=2)
     keyboard.add(
-        InlineKeyboardButton("📚 Reading", callback_data="main_reading"),
-        InlineKeyboardButton("✍️ Writing", callback_data="main_writing"),
-        InlineKeyboardButton("🎧 Listening", callback_data="main_listening"),
-        InlineKeyboardButton("🗣 Speaking", callback_data="main_speaking"),
-        InlineKeyboardButton("🧠 Vocabulary", callback_data="main_vocabulary"),
-        InlineKeyboardButton("📖 Grammar", callback_data="main_grammar"),
-        InlineKeyboardButton("🎯 CEFR / Multilevel", callback_data="main_cefr"),
-        InlineKeyboardButton("📄 Real exam's materials", callback_data="main_exam"),
-        InlineKeyboardButton("📂 Useful Materials", callback_data="main_materials"),
-        InlineKeyboardButton("📞 Biz bilan bog'lanish", callback_data="contact_admin"),
-        InlineKeyboardButton("ℹ️ About Me", callback_data="about_me")
+        InlineKeyboardButton("📚 Reading", callback_data="category_reading"),
+        InlineKeyboardButton("✍️ Writing", callback_data="category_writing"),
+        InlineKeyboardButton("🎧 Listening", callback_data="category_listening"),
+        InlineKeyboardButton("🗣 Speaking", callback_data="category_speaking"),
+        InlineKeyboardButton("🧠 Vocabulary", callback_data="category_vocabulary"),
+        InlineKeyboardButton("📖 Grammar", callback_data="category_grammar"),
+        InlineKeyboardButton("🎯 CEFR / Multilevel", callback_data="category_cefr"),
+        InlineKeyboardButton("📄 Real exam's materials", callback_data="category_exam"),
+        InlineKeyboardButton("📂 Useful Materials", callback_data="category_useful"),
+        InlineKeyboardButton("ℹ️ About Me", callback_data="about_me"),
+        InlineKeyboardButton("💬 Biz bilan bog'lanish", url=f"https://t.me/{ADMIN_USERNAME.replace('@', '')}")
     )
     return keyboard
 
+def get_admin_keyboard():
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    categories = [
+        ("Reading", "reading"), ("Writing", "writing"),
+        ("Listening", "listening"), ("Speaking", "speaking"),
+        ("Vocabulary", "vocabulary"), ("Grammar", "grammar"),
+        ("CEFR", "cefr"), ("Real Exam", "exam"), ("Useful", "useful")
+    ]
+    for name, cat in categories:
+        keyboard.add(InlineKeyboardButton(f"➕ {name}", callback_data=f"add_{cat}"))
+    return keyboard
+
+# --- HANDLERLAR ---
+
 @dp.message_handler(commands=['start'])
-async def cmd_start(message: types.Message):
-    user_id = message.from_user.id
-    if not await check_subscriptions(user_id):
-        keyboard = InlineKeyboardMarkup(row_width=1)
-        for channel in REQUIRED_CHANNELS:
-            keyboard.add(InlineKeyboardButton(f"📢 {channel} kanaliga qo'shilish", url=f"https://t.me/{channel.replace('@', '')}"))
-        keyboard.add(InlineKeyboardButton("✅ Obunani tekshirish", callback_data="check_sub"))
-        await message.answer("🚀 Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:", reply_markup=keyboard)
-        return
-
-    await message.answer(f"Assalomu alaykum, {message.from_user.first_name}!\nKerakli bo'limni tanlang:", reply_markup=get_main_menu())
-
-@dp.callback_query_handler(text="check_sub")
-async def process_check_sub(callback: types.CallbackQuery):
-    if await check_subscriptions(callback.from_user.id):
-        await callback.message.delete()
-        await callback.message.answer("Rahmat! Obuna tasdiqlandi. Kerakli bo'limni tanlang:", reply_markup=get_main_menu())
-    else:
-        await callback.answer("Siz hali hamma kanalga a'zo bo'lmadingiz! ❌", show_alert=True)
-
-# --- ADMIN PANEL ---
+async def send_welcome(message: types.Message):
+    await message.answer(
+        "👋 **Xush kelibsiz!**\n\nIngliz tilini mukammal o'rganishingiz uchun barcha zaruriy materiallar to'plangan portalga xush kelibsiz. Kerakli bo'limni tanlang:",
+        reply_markup=get_main_keyboard(),
+        parse_mode="Markdown"
+    )
 
 @dp.message_handler(commands=['admin'])
-async def cmd_admin(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
-        return
-    
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        InlineKeyboardButton("📚 Reading qo'shish", callback_data="adm_add_reading"),
-        InlineKeyboardButton("✍️ Writing qo'shish", callback_data="adm_add_writing"),
-        InlineKeyboardButton("🎧 Listening qo'shish", callback_data="adm_add_listening"),
-        InlineKeyboardButton("🗣 Speaking qo'shish", callback_data="adm_add_speaking"),
-        InlineKeyboardButton("🧠 Vocabulary qo'shish", callback_data="adm_add_vocabulary"),
-        InlineKeyboardButton("📖 Grammar qo'shish", callback_data="adm_add_grammar"),
-        InlineKeyboardButton("🎯 CEFR qo'shish", callback_data="adm_add_cefr"),
-        InlineKeyboardButton("📄 Exam qo'shish", callback_data="adm_add_exam"),
-        InlineKeyboardButton("📂 Materials qo'shish", callback_data="adm_add_materials"),
-        InlineKeyboardButton("❌ Chiqish", callback_data="adm_cancel")
-    )
-    await message.answer("🛠 **Admin panel:** Material qo'shmoqchi bo'lgan bo'limni tanlang:\n*(Eslatma: Fayl yuborganingizda unga izoh/caption yozishni unutmang!)*", reply_markup=keyboard)
-
-@dp.callback_query_handler(text_startswith="adm_add_")
-async def admin_select_section(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID: return
-    section = callback.data.split("_")[2]
-    
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        InlineKeyboardButton("📁 Fayl qo'shish", callback_data=f"type_file_{section}"),
-        InlineKeyboardButton("🎬 Video qo'shish", callback_data=f"type_video_{section}"),
-        InlineKeyboardButton("🔙 Orqaga", callback_data="back_to_admin")
-    )
-    await callback.message.edit_text(f"📁 **{section.upper()}** bo'limiga nima qo'shmoqchisiz?", reply_markup=keyboard)
-    await callback.answer()
-
-@dp.callback_query_handler(text_startswith="type_")
-async def admin_choose_type(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID: return
-    parts = callback.data.split("_")
-    f_type = parts[1]
-    section = parts[2]
-    
-    ADMIN_STATE[ADMIN_ID] = f"{section}_{f_type}"
-    await callback.message.edit_text(f"✅ Siz **{section.upper()}** bo'limiga **{f_type.upper()}** tanladingiz.\n\nEndi menga o'sha fayl yoki videoni yuboring va **albatta izoh (caption)** yozib yuboring.")
-    await callback.answer()
-
-@dp.callback_query_handler(text="back_to_admin")
-async def back_admin(callback: types.CallbackQuery):
-    if callback.from_user.id != ADMIN_ID: return
-    await cmd_admin(callback.message)
-    await callback.message.delete()
-
-@dp.callback_query_handler(text="adm_cancel")
-async def cancel_admin(callback: types.CallbackQuery):
-    ADMIN_STATE.pop(ADMIN_ID, None)
-    await callback.message.delete()
-    await callback.answer("Admin panel yopildi.")
-
-# Admin material yuborganda uni caption (izoh) bilan saqlash
-@dp.message_handler(content_types=[types.ContentType.DOCUMENT, types.ContentType.VIDEO, types.ContentType.AUDIO])
-async def save_admin_material(message: types.Message):
-    if message.from_user.id != ADMIN_ID: return
-    
-    state = ADMIN_STATE.get(ADMIN_ID)
-    if not state: return
-    
-    section, f_type = state.split("_")
-    caption = message.caption
-    
-    if not caption:
-        await message.reply("⚠️ Xatolik! Iltimos, fayl yoki video bilan birga **izoh (caption)** ham yozib yuboring.")
-        return
-    
-    if message.content_type == types.ContentType.VIDEO and f_type == "video":
-        file_id = message.video.file_id
-        DATABASE[f"{section}_videos"].append({"file_id": file_id, "title": caption})
-        await message.reply(f"✅ Video muvaffaqiyatli saqlandi!\nSarlavhasi: {caption}")
-    elif message.content_type in [types.ContentType.DOCUMENT, types.ContentType.AUDIO] and f_type == "file":
-        file_id = message.document.file_id if message.document else message.audio.file_id
-        DATABASE[f"{section}_files"].append({"file_id": file_id, "title": caption})
-        await message.reply(f"✅ Fayl muvaffaqiyatli saqlandi!\nSarlavhasi: {caption}")
+async def admin_panel(message: types.Message):
+    if message.from_user.id == ADMIN_ID:
+        await message.answer("⚙️ **Admin Panel:** Material qo'shmoqchi bo'lgan bo'limni tanlang:", reply_markup=get_admin_keyboard())
     else:
-        await message.reply(f"⚠️ Siz tanlagan turga mos kelmaydigan fayl yubordingiz.")
+        await message.answer("⛔ Siz admin emassiz!")
 
-# --- FOYDALANUVCHI QISMI ---
-
-@dp.callback_query_handler(text_startswith="main_")
-async def user_select_main_menu(callback: types.CallbackQuery):
-    section = callback.data.split("_")[1]
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        InlineKeyboardButton("📁 Fayllar", callback_data=f"get_files_{section}"),
-        InlineKeyboardButton("🎬 Videolar", callback_data=f"get_videos_{section}"),
-        InlineKeyboardButton("🔙 Orqaga", callback_data="back_to_main")
-    )
-    await callback.message.edit_text(f"📂 **{section.upper()}** bo'limi. Kerakli turini tanlang:", reply_markup=keyboard)
-    await callback.answer()
-
-@dp.callback_query_handler(text="back_to_main")
-async def back_to_main_menu(callback: types.CallbackQuery):
-    await callback.message.edit_text("Assalomu alaykum! Kerakli bo'limni tanlang:", reply_markup=get_main_menu())
-    await callback.answer()
-
-# Ro'yxatni (tugmalarni) chiqarish
-@dp.callback_query_handler(text_startswith="get_")
-async def send_materials_list(callback: types.CallbackQuery):
-    parts = callback.data.split("_")
-    m_type = parts[1] # files yoki videos
-    section = parts[2] # reading...
-    
-    key = f"{section}_{m_type}"
-    items = DATABASE.get(key, [])
-    
-    if not items:
-        await callback.answer(f"📭 Hozircha bu bo'limda {m_type} mavjud emas!", show_alert=True)
-        return
-    
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    for index, item in enumerate(items):
-        keyboard.add(InlineKeyboardButton(item["title"], callback_data=f"show_{section}_{m_type}_{index}"))
-    
-    keyboard.add(InlineKeyboardButton("🔙 Orqaga", callback_data=f"main_{section}"))
-    
-    await callback.message.edit_text(f"📋 **{section.upper()}** bo'limidagi {m_type} ro'yxati:\nKeraklisini tanlang:", reply_markup=keyboard)
-    await callback.answer()
-
-# Tanlangan bitta fayl yoki videoni yuborish
-@dp.callback_query_handler(text_startswith="show_")
-async def send_single_item(callback: types.CallbackQuery):
-    parts = callback.data.split("_")
-    section = parts[1]
-    m_type = parts[2]
-    index = int(parts[3])
-    
-    key = f"{section}_{m_type}"
-    items = DATABASE.get(key, [])
-    
-    if index < len(items):
-        item = items[index]
-        if m_type == "videos":
-            await callback.message.answer_video(item["file_id"], caption=item["title"])
-        else:
-            await callback.message.answer_document(item["file_id"], caption=item["title"])
-    else:
-        await callback.answer("⚠️ Fayl topilmadi!", show_alert=True)
-    await callback.answer()
-
-# Biz bilan bog'lanish
-@dp.callback_query_handler(text="contact_admin")
-async def process_contact(callback: types.CallbackQuery):
-    await callback.message.answer(f"📞 Admin bilan bog'lanish uchun: t.me/{ADMIN_USERNAME}\nSavollaringiz bo'lsa yozishingiz mumkin.")
-    await callback.answer()
-
-# About Me
+# About Me Bo'limi
 @dp.callback_query_handler(text="about_me")
 async def process_about(callback: types.CallbackQuery):
-    await callback.message.answer("ℹ️ **About Me**\nUshbu bot ingliz tilini o'rganuvchilar uchun maxsus materiallar taqdim etish va 24/7 xizmat ko'rsatish uchun yaratilgan.")
+    about_text = (
+        "✨ **English Materials Bot**\n\n"
+        "📖 **Bizning maqsadimiz:**\n"
+        "Ushbu loyiha yoshlar, talabalar va ingliz tilini o'rganuvchilarga sifatli va foydali o'quv materiallarini bepul va qulay tarzda taqdim etish maqsadida yaratilgan.\n\n"
+        "⚖️ **Mualliflik huquqlariga hurmat:**\n"
+        "Botdagi barcha manbalar va intellektual mulk egalarining mualliflik huquqlari to'liq hurmat qilinadi. Barcha fayllar faqat ma'rifiy va ta'limiy maqsadlarda foydalaniladi.\n\n"
+        "🚀 *Ilm izlashdan hech qachon to'xtamang!*"
+    )
+    await callback.message.answer(about_text, parse_mode="Markdown")
     await callback.answer()
 
-# Reklama kanallarini boshqarish buyruqlari
+@dp.callback_query_handler(lambda c: c.data.startswith('category_'))
+async def process_category(callback: types.CallbackQuery):
+    cat = callback.data.split('_')[1]
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton("📁 Fayllar", callback_data=f"list_files_{cat}"),
+        InlineKeyboardButton("🎬 Videolar", callback_data=f"list_videos_{cat}"),
+        InlineKeyboardButton("⬅️ Orqaga", callback_data="back_to_main")
+    )
+    await callback.message.edit_text(f"📂 **{cat.capitalize()}** bo'limi. Turini tanlang:", reply_markup=keyboard, parse_mode="Markdown")
+
+@dp.callback_query_handler(text="back_to_main")
+async def back_main(callback: types.CallbackQuery):
+    await callback.message.edit_text("Kerakli bo'limni tanlang:", reply_markup=get_main_keyboard())
+
+@dp.callback_query_handler(lambda c: c.data.startswith('list_'))
+async def list_items(callback: types.CallbackQuery):
+    _, item_type, cat = callback.data.split('_')
+    items = database[cat][item_type]
+    
+    if not items:
+        await callback.message.answer("⚠️ Hozircha bu bo'limda materiallar mavjud emas.")
+        await callback.answer()
+        return
+
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    for idx, item in enumerate(items):
+        keyboard.add(InlineKeyboardButton(f"📄 {item['title']}", callback_data=f"get_{cat}_{item_type}_{idx}"))
+    keyboard.add(InlineKeyboardButton("⬅️ Orqaga", callback_data=f"category_{cat}"))
+    
+    await callback.message.edit_text(f"📋 **{cat.capitalize()} ({item_type})** ro'yxati:", reply_markup=keyboard, parse_mode="Markdown")
+
+@dp.callback_query_handler(lambda c: c.data.startswith('get_'))
+async def get_item(callback: types.CallbackQuery):
+    _, cat, item_type, idx = callback.data.split('_')
+    item = database[cat][item_type][int(idx)]
+    
+    if item_type == 'files':
+        await callback.message.answer_document(item['file_id'], caption=item['caption'])
+    else:
+        await callback.message.answer_video(item['file_id'], caption=item['caption'])
+    await callback.answer()
+
+@dp.callback_query_handler(lambda c: c.data.startswith('add_'))
+async def add_item_start(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    cat = callback.data.split('_')[1]
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton("📁 Fayl qo'shish", callback_data=f"upload_files_{cat}"),
+        InlineKeyboardButton("🎬 Video qo'shish", callback_data=f"upload_videos_{cat}")
+    )
+    await callback.message.answer(f"➕ **{cat.capitalize()}** bo'limiga nima qo'shasiz?", reply_markup=keyboard, parse_mode="Markdown")
+
+@dp.callback_query_handler(lambda c: c.data.startswith('upload_'))
+async def upload_prompt(callback: types.CallbackQuery):
+    _, item_type, cat = callback.data.split('_')
+    user_states[callback.from_user.id] = {'cat': cat, 'type': item_type}
+    await callback.message.answer(f"Iltimos, {cat} uchun **{item_type[:-1]}** faylini izohi (caption) bilan yuboring:")
+    await callback.answer()
+
+@dp.message_handler(content_types=[types.ContentType.DOCUMENT, types.ContentType.VIDEO])
+async def handle_upload(message: types.Message):
+    if message.from_user.id not in user_states:
+        return
+    
+    state = user_states.pop(message.from_user.id)
+    cat = state['cat']
+    item_type = state['type']
+    
+    caption = message.caption or "Material"
+    title = caption.split('\n')[0][:30]
+    
+    file_id = message.document.file_id if message.document else message.video.file_id
+    
+    database[cat][item_type].append({
+        'file_id': file_id,
+        'title': title,
+        'caption': caption
+    })
+    await message.answer("✅ Material muvaffaqiyatli saqlandi!")
+
 @dp.message_handler(commands=['addchan'])
 async def add_channel(message: types.Message):
-    if message.from_user.id != ADMIN_ID: return
-    args = message.get_args()
-    if args and args not in REQUIRED_CHANNELS:
-        REQUIRED_CHANNELS.append(args.strip())
-        await message.reply(f"✅ {args} qo'shildi!")
+    if message.from_user.id == ADMIN_ID:
+        channel = message.get_args()
+        if channel:
+            channels.append(channel)
+            await message.answer(f"✅ Kanal qo'shildi: {channel}")
+        else:
+            await message.answer("Format: `/addchan @kanalname`", parse_mode="Markdown")
 
 @dp.message_handler(commands=['delchan'])
 async def del_channel(message: types.Message):
-    if message.from_user.id != ADMIN_ID: return
-    args = message.get_args()
-    if args in REQUIRED_CHANNELS:
-        REQUIRED_CHANNELS.remove(args.strip())
-        await message.reply(f"🗑 {args} o'chirildi!")
+    if message.from_user.id == ADMIN_ID:
+        channel = message.get_args()
+        if channel in channels:
+            channels.remove(channel)
+            await message.answer(f"❌ Kanal olib tashlandi: {channel}")
+        else:
+            await message.answer("Kanal topilmadi. Format: `/delchan @kanalname`", parse_mode="Markdown")
+
+# --- STARTUP LOGIC (Polling + Web Server + Menu) ---
+async def on_startup(dp):
+    await set_default_commands(dp)
+    asyncio.create_task(web_server())
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    loop.create_task(web_server())
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(dp, on_startup=on_startup, skip_updates=True)
