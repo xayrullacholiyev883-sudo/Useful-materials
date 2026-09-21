@@ -10,6 +10,7 @@ from aiohttp import web
 # --- SOZLAMALAR ---
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8938280108:AAEsADtH0GzJpfelsCPm-f2QpYJMMM998mQ")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8243336938"))
+ADMIN_USERNAME = "@narzullayevich_2010"
 
 bot = Bot(token=BOT_TOKEN)
 storage = MemoryStorage()
@@ -67,6 +68,7 @@ class AdminStates(StatesGroup):
 def get_main_keyboard(user_id: int):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.row(types.KeyboardButton("📚 Useful Materials"), types.KeyboardButton("ℹ️ About Me"))
+    kb.row(types.KeyboardButton("📞 Biz bilan bog'lanish"))
     if user_id == ADMIN_ID:
         kb.add(types.KeyboardButton("⚙️ Admin Panel"))
     return kb
@@ -115,6 +117,15 @@ async def about_me(message: types.Message):
         "<b>Bot haqida:</b>\n"
         "Ushbu bot ingliz tilini o'rganuvchilar uchun foydali manbalarni ulashish maqsadida yaratilgan.\n\n"
         "Barcha materiallar mualliflik huquqini hurmat qilgan holda, faqat ta'limiy maqsadda taqdim etiladi."
+    )
+    await message.answer(text, parse_mode="HTML")
+
+@dp.message_handler(lambda msg: msg.text == "📞 Biz bilan bog'lanish", state="*")
+async def contact_us(message: types.Message):
+    text = (
+        "<b>📞 Biz bilan bog'lanish:</b>\n\n"
+        "Savollaringiz, takliflaringiz yoki reklama masalalari bo'yicha admin bilan bog'lanishingiz mumkin:\n\n"
+        f"👨‍💻 <b>Admin:</b> {ADMIN_USERNAME}"
     )
     await message.answer(text, parse_mode="HTML")
 
