@@ -3,7 +3,7 @@ from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Siz taqdim etgan ma'lumotlar
-API_TOKEN = "8938280108:AAHRftEIUXStQdjY4q90-zFMIo5tH3XAzys"
+API_TOKEN = "TOKENINGizni_shu_yerga_yozing"  # O'z tokeningizni yozing
 ADMIN_ID = 8243336938
 ADMIN_USERNAME = "narzullayevich_2010"
 
@@ -15,7 +15,11 @@ DATABASE = {
     "reading_files": [], "reading_videos": [],
     "writing_files": [], "writing_videos": [],
     "listening_files": [], "listening_videos": [],
-    "speaking_files": [], "speaking_videos": []
+    "speaking_files": [], "speaking_videos": [],
+    "vocabulary_files": [], "vocabulary_videos": [],
+    "grammar_files": [], "grammar_videos": [],
+    "cefr_files": [], "cefr_videos": [],
+    "materials_files": [], "materials_videos": []
 }
 
 ADMIN_STATE = {}
@@ -43,6 +47,10 @@ def get_main_menu():
         InlineKeyboardButton("✍️ Writing", callback_data="main_writing"),
         InlineKeyboardButton("🎧 Listening", callback_data="main_listening"),
         InlineKeyboardButton("🗣 Speaking", callback_data="main_speaking"),
+        InlineKeyboardButton("🧠 Vocabulary", callback_data="main_vocabulary"),
+        InlineKeyboardButton("📖 Grammar", callback_data="main_grammar"),
+        InlineKeyboardButton("🎯 CEFR / Multilevel", callback_data="main_cefr"),
+        InlineKeyboardButton("📂 Useful Materials", callback_data="main_materials"),
         InlineKeyboardButton("📞 Biz bilan bog'lanish", callback_data="contact_admin"),
         InlineKeyboardButton("ℹ️ About Me", callback_data="about_me")
     )
@@ -82,6 +90,10 @@ async def cmd_admin(message: types.Message):
         InlineKeyboardButton("✍️ Writing qo'shish", callback_data="adm_add_writing"),
         InlineKeyboardButton("🎧 Listening qo'shish", callback_data="adm_add_listening"),
         InlineKeyboardButton("🗣 Speaking qo'shish", callback_data="adm_add_speaking"),
+        InlineKeyboardButton("🧠 Vocabulary qo'shish", callback_data="adm_add_vocabulary"),
+        InlineKeyboardButton("📖 Grammar qo'shish", callback_data="adm_add_grammar"),
+        InlineKeyboardButton("🎯 CEFR qo'shish", callback_data="adm_add_cefr"),
+        InlineKeyboardButton("📂 Materials qo'shish", callback_data="adm_add_materials"),
         InlineKeyboardButton("❌ Chiqish", callback_data="adm_cancel")
     )
     await message.answer("🛠 **Admin panel:** Material qo'shmoqchi bo'lgan bo'limni tanlang:\n*(Eslatma: Fayl yuborganingizda unga izoh/caption yozishni unutmang!)*", reply_markup=keyboard)
@@ -108,7 +120,7 @@ async def admin_choose_type(callback: types.CallbackQuery):
     section = parts[2]
     
     ADMIN_STATE[ADMIN_ID] = f"{section}_{f_type}"
-    await callback.message.edit_text(f"✅ Siz **{section.upper()}** bo'limiga **{f_type.upper()}** tanladingiz.\n\nEndi menga o'sha fayl yoki videoni yuboring va **albatta izoh (caption)** yozib yuboring (masalan: Reading Part 5 - Muallif).")
+    await callback.message.edit_text(f"✅ Siz **{section.upper()}** bo'limiga **{f_type.upper()}** tanladingiz.\n\nEndi menga o'sha fayl yoki videoni yuboring va **albatta izoh (caption)** yozib yuboring.")
     await callback.answer()
 
 @dp.callback_query_handler(text="back_to_admin")
@@ -135,7 +147,7 @@ async def save_admin_material(message: types.Message):
     caption = message.caption
     
     if not caption:
-        await message.reply("⚠️ Xatolik! Iltimos, fayl yoki video bilan birga **izoh (caption)** ham yozib yuboring (Masalan: Reading Part 5).")
+        await message.reply("⚠️ Xatolik! Iltimos, fayl yoki video bilan birga **izoh (caption)** ham yozib yuboring.")
         return
     
     if message.content_type == types.ContentType.VIDEO and f_type == "video":
@@ -183,7 +195,6 @@ async def send_materials_list(callback: types.CallbackQuery):
         return
     
     keyboard = InlineKeyboardMarkup(row_width=1)
-    # Har bir fayl uchun uning sarlavhasi (izohi) bilan tugma yaratamiz
     for index, item in enumerate(items):
         keyboard.add(InlineKeyboardButton(item["title"], callback_data=f"show_{section}_{m_type}_{index}"))
     
