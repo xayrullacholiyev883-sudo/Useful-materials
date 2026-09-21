@@ -1,6 +1,7 @@
 import os
 import asyncio
-from aiogram import Bot, Dispatcher, types, F
+from aiogram import Bot, Dispatcher, types
+from aiogram import F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -71,7 +72,7 @@ async def start_cmd(message: types.Message, state: FSMContext):
         reply_markup=get_main_keyboard(message.from_user.id)
     )
 
-@dp.message(F.text == "ℹ️ About Me")
+@dp.message(lambda msg: msg.text == "ℹ️ About Me")
 async def about_me(message: types.Message):
     text = (
         "<b>Bot haqida:</b>\n"
@@ -80,11 +81,11 @@ async def about_me(message: types.Message):
     )
     await message.answer(text, parse_mode="HTML")
 
-@dp.message(F.text == "📚 Useful Materials")
+@dp.message(lambda msg: msg.text == "📚 Useful Materials")
 async def show_materials(message: types.Message):
     await message.answer("Kerakli bo'limni tanlang:", reply_markup=get_categories_keyboard(prefix="cat_"))
 
-@dp.callback_query(F.data.startswith("cat_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith("cat_"))
 async def process_category_select(callback: types.CallbackQuery):
     cat_name = callback.data.split("cat_")[1]
     items = materials_db.get(cat_name, [])
@@ -100,7 +101,7 @@ async def process_category_select(callback: types.CallbackQuery):
     await callback.answer()
 
 # --- ADMIN PANEL ---
-@dp.message(F.text == "⚙️ Admin Panel")
+@dp.message(lambda msg: msg.text == "⚙️ Admin Panel")
 async def admin_panel(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
@@ -108,7 +109,7 @@ async def admin_panel(message: types.Message, state: FSMContext):
     await message.answer("⚙️ <b>Admin Panel:</b> Material qo'shmoqchi bo'lgan bo'limni tanlang:", 
                          reply_markup=get_categories_keyboard(prefix="admin_"), parse_mode="HTML")
 
-@dp.callback_query(F.data.startswith("admin_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith("admin_"))
 async def admin_cat_click(callback: types.CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         return
@@ -117,7 +118,7 @@ async def admin_cat_click(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer(f"<b>{cat_name}</b> bo'limiga nima qo'shasiz?", reply_markup=get_file_type_keyboard(), parse_mode="HTML")
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("type_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith("type_"))
 async def admin_type_click(callback: types.CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         return
@@ -129,9 +130,9 @@ async def admin_type_click(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 # 1. Avval izoh (sarlavha) matnini qabul qilish
-@dp.message(AdminStates.waiting_for_caption, F.text)
+@dp.message(AdminStates.waiting_for_caption)
 async def process_caption(message: types.Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id != ADMIN_ID or not message.text:
         return
     await state.update_data(caption_text=message.text)
     
@@ -142,11 +143,15 @@ async def process_caption(message: types.Message, state: FSMContext):
     await state.set_state(AdminStates.waiting_for_file)
 
 # 2. Keyin faylni qabul qilish va saqlash
-@dp.message(AdminStates.waiting_for_file, F.document | F.video)
+@dp.message(AdminStates.waiting_for_file)
 async def process_file(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
     
+    if not message.document and not message.video:
+        await message.answer("Iltimos, faqat fayl yoki video yuboring.")
+        return
+
     data = await state.get_data()
     cat_name = data.get("selected_category")
     file_type = data.get("file_type")
