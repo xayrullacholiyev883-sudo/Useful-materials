@@ -3,7 +3,7 @@ from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Siz taqdim etgan ma'lumotlar
-API_TOKEN = "8938280108:AAG3j4pmmhAnFtp1r91I4bp8Gx19RU5xqio"  # O'z tokeningizni yozing
+API_TOKEN = "8938280108:AAGheXH5WPb9m4c00o0rKmmzNSJMBagJDJA"
 ADMIN_ID = 8243336938
 ADMIN_USERNAME = "narzullayevich_2010"
 
@@ -19,6 +19,7 @@ DATABASE = {
     "vocabulary_files": [], "vocabulary_videos": [],
     "grammar_files": [], "grammar_videos": [],
     "cefr_files": [], "cefr_videos": [],
+    "exam_files": [], "exam_videos": [],          # Real exam's materials uchun
     "materials_files": [], "materials_videos": []
 }
 
@@ -50,6 +51,7 @@ def get_main_menu():
         InlineKeyboardButton("🧠 Vocabulary", callback_data="main_vocabulary"),
         InlineKeyboardButton("📖 Grammar", callback_data="main_grammar"),
         InlineKeyboardButton("🎯 CEFR / Multilevel", callback_data="main_cefr"),
+        InlineKeyboardButton("📄 Real exam's materials", callback_data="main_exam"),
         InlineKeyboardButton("📂 Useful Materials", callback_data="main_materials"),
         InlineKeyboardButton("📞 Biz bilan bog'lanish", callback_data="contact_admin"),
         InlineKeyboardButton("ℹ️ About Me", callback_data="about_me")
@@ -93,6 +95,7 @@ async def cmd_admin(message: types.Message):
         InlineKeyboardButton("🧠 Vocabulary qo'shish", callback_data="adm_add_vocabulary"),
         InlineKeyboardButton("📖 Grammar qo'shish", callback_data="adm_add_grammar"),
         InlineKeyboardButton("🎯 CEFR qo'shish", callback_data="adm_add_cefr"),
+        InlineKeyboardButton("📄 Exam qo'shish", callback_data="adm_add_exam"),
         InlineKeyboardButton("📂 Materials qo'shish", callback_data="adm_add_materials"),
         InlineKeyboardButton("❌ Chiqish", callback_data="adm_cancel")
     )
