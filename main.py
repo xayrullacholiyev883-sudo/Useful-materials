@@ -1,12 +1,9 @@
 import os
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram import F
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiohttp import web
 
 # --- SOZLAMALAR ---
@@ -14,7 +11,8 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "8938280108:AAEsADtH0GzJpfelsCPm-f2QpYJMMM998
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8243336938"))
 
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
 
 # --- BAZA (Xotirada saqlash) ---
 materials_db = {
@@ -24,33 +22,33 @@ materials_db = {
 
 # --- FSM (Holatlar) ---
 class AdminStates(StatesGroup):
-    waiting_for_category = State()
     waiting_for_caption = State()
     waiting_for_file = State()
 
 # --- TUGMALAR ---
 def get_main_keyboard(user_id: int):
-    kb = [
-        [KeyboardButton(text="📚 Useful Materials"), KeyboardButton(text="ℹ️ About Me")]
-    ]
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row(types.KeyboardButton("📚 Useful Materials"), types.KeyboardButton("ℹ️ About Me"))
     if user_id == ADMIN_ID:
-        kb.append([KeyboardButton(text="⚙️ Admin Panel")])
-    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+        kb.add(types.KeyboardButton("⚙️ Admin Panel"))
+    return kb
 
 def get_categories_keyboard(prefix="cat_"):
-    buttons = []
-    categories = list(materials_db.keys())
-    for cat in categories:
-        buttons.append([InlineKeyboardButton(text=f"➕ {cat}" if prefix == "admin_" else cat, callback_data=f"{prefix}{cat}")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for cat in materials_db.keys():
+        text = f"➕ {cat}" if prefix == "admin_" else cat
+        kb.add(types.InlineKeyboardButton(text=text, callback_data=f"{prefix}{cat}"))
+    return kb
 
 def get_file_type_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📄 Fayl qo'shish", callback_data="type_file"),
-         InlineKeyboardButton(text="🎬 Video qo'shish", callback_data="type_video")]
-    ])
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        types.InlineKeyboardButton(text="📄 Fayl qo'shish", callback_data="type_file"),
+        types.InlineKeyboardButton(text="🎬 Video qo'shish", callback_data="type_video")
+    )
+    return kb
 
-# --- WEB SERVER (Render uchun Dummy Port) ---
+# --- WEB SERVER (Render uchun) ---
 async def handle(request):
     return web.Response(text="Bot is running live 24/7!")
 
@@ -64,15 +62,15 @@ async def start_web_server():
     await site.start()
 
 # --- HANDLERLAR ---
-@dp.message(Command("start"))
+@dp.message_handler(commands=["start"], state="*")
 async def start_cmd(message: types.Message, state: FSMContext):
-    await state.clear()
+    await state.finish()
     await message.answer(
         "Xush kelibsiz! English Materials botiga marhamat.",
         reply_markup=get_main_keyboard(message.from_user.id)
     )
 
-@dp.message(lambda msg: msg.text == "ℹ️ About Me")
+@dp.message_handler(lambda msg: msg.text == "ℹ️ About Me", state="*")
 async def about_me(message: types.Message):
     text = (
         "<b>Bot haqida:</b>\n"
@@ -81,11 +79,11 @@ async def about_me(message: types.Message):
     )
     await message.answer(text, parse_mode="HTML")
 
-@dp.message(lambda msg: msg.text == "📚 Useful Materials")
+@dp.message_handler(lambda msg: msg.text == "📚 Useful Materials", state="*")
 async def show_materials(message: types.Message):
     await message.answer("Kerakli bo'limni tanlang:", reply_markup=get_categories_keyboard(prefix="cat_"))
 
-@dp.callback_query(lambda c: c.data and c.data.startswith("cat_"))
+@dp.callback_query_handler(lambda c: c.data and c.data.startswith("cat_"), state="*")
 async def process_category_select(callback: types.CallbackQuery):
     cat_name = callback.data.split("cat_")[1]
     items = materials_db.get(cat_name, [])
@@ -101,61 +99,58 @@ async def process_category_select(callback: types.CallbackQuery):
     await callback.answer()
 
 # --- ADMIN PANEL ---
-@dp.message(lambda msg: msg.text == "⚙️ Admin Panel")
+@dp.message_handler(lambda msg: msg.text == "⚙️ Admin Panel", state="*")
 async def admin_panel(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await state.clear()
+    await state.finish()
     await message.answer("⚙️ <b>Admin Panel:</b> Material qo'shmoqchi bo'lgan bo'limni tanlang:", 
                          reply_markup=get_categories_keyboard(prefix="admin_"), parse_mode="HTML")
 
-@dp.callback_query(lambda c: c.data and c.data.startswith("admin_"))
+@dp.callback_query_handler(lambda c: c.data and c.data.startswith("admin_"), state="*")
 async def admin_cat_click(callback: types.CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         return
     cat_name = callback.data.split("admin_")[1]
-    await state.update_data(selected_category=cat_name)
+    async with state.proxy() as data:
+        data["selected_category"] = cat_name
     await callback.message.answer(f"<b>{cat_name}</b> bo'limiga nima qo'shasiz?", reply_markup=get_file_type_keyboard(), parse_mode="HTML")
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data and c.data.startswith("type_"))
+@dp.callback_query_handler(lambda c: c.data and c.data.startswith("type_"), state="*")
 async def admin_type_click(callback: types.CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         return
     file_type = "file" if callback.data == "type_file" else "video"
-    await state.update_data(file_type=file_type)
+    async with state.proxy() as data:
+        data["file_type"] = file_type
     
     await callback.message.answer("1-qadam: Material uchun izoh (sarlavha) matnini yuboring:")
-    await state.set_state(AdminStates.waiting_for_caption)
+    await AdminStates.waiting_for_caption.set()
     await callback.answer()
 
-# 1. Avval izoh (sarlavha) matnini qabul qilish
-@dp.message(AdminStates.waiting_for_caption)
+# 1. Avval izoh matnini qabul qilish
+@dp.message_handler(state=AdminStates.waiting_for_caption, content_types=types.ContentTypes.TEXT)
 async def process_caption(message: types.Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID or not message.text:
+    if message.from_user.id != ADMIN_ID:
         return
-    await state.update_data(caption_text=message.text)
-    
-    data = await state.get_data()
-    f_type = "faylni (PDF/Doc)" if data.get("file_type") == "file" else "videoni"
+    async with state.proxy() as data:
+        data["caption_text"] = message.text
+        f_type = "faylni (PDF/Doc)" if data.get("file_type") == "file" else "videoni"
     
     await message.answer(f"2-qadam: Endi {f_type} yuboring:")
-    await state.set_state(AdminStates.waiting_for_file)
+    await AdminStates.waiting_for_file.set()
 
-# 2. Keyin faylni qabul qilish va saqlash
-@dp.message(AdminStates.waiting_for_file)
+# 2. Keyin fayl yoki videoni saqlash
+@dp.message_handler(state=AdminStates.waiting_for_file, content_types=[types.ContentType.DOCUMENT, types.ContentType.VIDEO])
 async def process_file(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
     
-    if not message.document and not message.video:
-        await message.answer("Iltimos, faqat fayl yoki video yuboring.")
-        return
-
-    data = await state.get_data()
-    cat_name = data.get("selected_category")
-    file_type = data.get("file_type")
-    caption = data.get("caption_text", "Material")
+    async with state.proxy() as data:
+        cat_name = data.get("selected_category")
+        file_type = data.get("file_type")
+        caption = data.get("caption_text", "Material")
     
     file_id = message.document.file_id if message.document else message.video.file_id
     
@@ -167,18 +162,17 @@ async def process_file(message: types.Message, state: FSMContext):
     
     await message.answer("✅ Material muvaffaqiyatli saqlandi!")
     
-    # Saqlangan materialni ko'rsatish
     if file_type == "file":
         await message.answer_document(document=file_id, caption=caption)
     else:
         await message.answer_video(video=file_id, caption=caption)
         
-    await state.clear()
+    await state.finish()
 
 # --- ISHGA TUSHIRISH ---
-async def main():
+async def on_startup(dp):
     await start_web_server()
-    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    from aiogram import executor
+    executor.start_polling(dp, on_startup=on_startup, skip_updates=True)
