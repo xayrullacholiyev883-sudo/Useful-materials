@@ -8,7 +8,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiohttp import web
 
 # --- SOZLAMALAR ---
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8938280108:AAEfLcyHub_hokl3LS7KM_hujT8ZrWTD-t0")
+BOT_TOKEN =  "8938280108:AAEfLcyHub_hokl3LS7KM_hujT8ZrWTD-t0")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8243336938"))
 ADMIN_USERNAME = "@narzullayevich_2010"
 STORAGE_CHANNEL_ID = -1003662758278  # Doimiy saqlash uchun yopiq kanal ID raqami
