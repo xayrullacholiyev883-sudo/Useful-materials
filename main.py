@@ -40,12 +40,13 @@ def get_categories_keyboard(prefix="cat_"):
         kb.add(types.InlineKeyboardButton(text=text, callback_data=f"{prefix}{cat}"))
     return kb
 
-def get_file_type_keyboard():
+def get_admin_action_keyboard(cat_name: str):
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
         types.InlineKeyboardButton(text="📄 Fayl qo'shish", callback_data="type_file"),
         types.InlineKeyboardButton(text="🎬 Video qo'shish", callback_data="type_video")
     )
+    kb.add(types.InlineKeyboardButton(text="🗑 Fayllarni bittalab o'chirish", callback_data=f"list_delete_{cat_name}"))
     return kb
 
 # --- WEB SERVER (Render uchun) ---
@@ -104,7 +105,7 @@ async def admin_panel(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
     await state.finish()
-    await message.answer("⚙️ <b>Admin Panel:</b> Material qo'shmoqchi bo'lgan bo'limni tanlang:", 
+    await message.answer("⚙️ <b>Admin Panel:</b> Kerakli bo'limni tanlang:", 
                          reply_markup=get_categories_keyboard(prefix="admin_"), parse_mode="HTML")
 
 @dp.callback_query_handler(lambda c: c.data and c.data.startswith("admin_"), state="*")
@@ -114,7 +115,46 @@ async def admin_cat_click(callback: types.CallbackQuery, state: FSMContext):
     cat_name = callback.data.split("admin_")[1]
     async with state.proxy() as data:
         data["selected_category"] = cat_name
-    await callback.message.answer(f"<b>{cat_name}</b> bo'limiga nima qo'shasiz?", reply_markup=get_file_type_keyboard(), parse_mode="HTML")
+    await callback.message.answer(f"<b>{cat_name}</b> bo'limi bo'yicha amalni tanlang:", reply_markup=get_admin_action_keyboard(cat_name), parse_mode="HTML")
+    await callback.answer()
+
+# --- BITTALAB O'CHIRISH RO'YXATI ---
+@dp.callback_query_handler(lambda c: c.data and c.data.startswith("list_delete_"), state="*")
+async def list_files_for_delete(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    cat_name = callback.data.split("list_delete_")[1]
+    items = materials_db.get(cat_name, [])
+    
+    if not items:
+        await callback.message.answer(f"<b>{cat_name}</b> bo'limida o'chirish uchun fayllar yo'q.", parse_mode="HTML")
+    else:
+        await callback.message.answer(f"🗑 <b>{cat_name}</b> bo'limidagi fayllar ro'yxati:", parse_mode="HTML")
+        for index, item in enumerate(items):
+            del_kb = types.InlineKeyboardMarkup()
+            del_kb.add(types.InlineKeyboardButton(text="❌ Ushbu faylni o'chirish", callback_data=f"del_{cat_name}_{index}"))
+            
+            if item["type"] == "file":
+                await callback.message.answer_document(document=item["file_id"], caption=item["caption"], reply_markup=del_kb)
+            elif item["type"] == "video":
+                await callback.message.answer_video(video=item["file_id"], caption=item["caption"], reply_markup=del_kb)
+    await callback.answer()
+
+# --- FAYLNI BITTALAB O'CHIRISH HANDLERI ---
+@dp.callback_query_handler(lambda c: c.data and c.data.startswith("del_"), state="*")
+async def delete_single_file(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        return
+    parts = callback.data.split("_")
+    cat_name = parts[1]
+    index = int(parts[2])
+    
+    if index < len(materials_db[cat_name]):
+        removed_item = materials_db[cat_name].pop(index)
+        await callback.message.answer(f"✅ <b>{removed_item['caption']}</b> fayli muvaffaqiyatli o'chirildi!", parse_mode="HTML")
+        await callback.message.delete()
+    else:
+        await callback.message.answer("⚠️ Fayl allaqachon o'chirilgan yoki topilmadi.")
     await callback.answer()
 
 @dp.callback_query_handler(lambda c: c.data and c.data.startswith("type_"), state="*")
