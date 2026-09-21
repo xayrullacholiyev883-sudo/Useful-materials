@@ -1,4 +1,5 @@
 import os
+import json
 import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -7,7 +8,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiohttp import web
 
 # --- SOZLAMALAR ---
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8938280108:AAEfLcyHub_hokl3LS7kM_hujT8ZrWTD-t0")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8938280108:AAEfLcyHub_hokl3LS7KM_hujT8ZrWTD-t0")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8243336938"))
 ADMIN_USERNAME = "@narzullayevich_2010"
 STORAGE_CHANNEL_ID = -1003662758278  # Doimiy saqlash uchun yopiq kanal ID raqami
@@ -16,8 +17,11 @@ bot = Bot(token=BOT_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-# Materiallarni vaqtincha xotirada saqlash strukturasi (Kanal ID orqali ishlaydi)
-materials_db = {
+# Ma'lumotlarni saqlash uchun fayl nomi
+DB_FILE = "materials_db.json"
+
+# Boshlang'ich baza strukturasi
+default_db = {
     "Reading": [],
     "Writing": [],
     "Listening": [],
@@ -29,8 +33,28 @@ materials_db = {
     "Useful": []
 }
 
+# Bazani yuklash funksiyasi
+def load_db():
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("db", default_db), data.get("counter", 0)
+        except:
+            return default_db, 0
+    return default_db, 0
+
+# Bazani saqlash funksiyasi
+def save_db():
+    data = {
+        "db": materials_db,
+        "counter": item_counter
+    }
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+materials_db, item_counter = load_db()
 CATEGORIES = list(materials_db.keys())
-item_counter = 0
 
 # --- FSM (Holatlar) ---
 class AdminStates(StatesGroup):
@@ -64,7 +88,7 @@ def get_admin_action_keyboard(cat_name: str):
 
 # --- WEB SERVER (Render uchun) ---
 async def handle(request):
-    return web.Response(text="Bot is running live 24/7 with Telegram Channel Storage!")
+    return web.Response(text="Bot is running live 24/7 with Persistent Storage!")
 
 async def start_web_server():
     app = web.Application()
@@ -178,6 +202,7 @@ async def delete_single_file(callback: types.CallbackQuery):
                 except:
                     pass
                 materials_db[cat].remove(item)
+                save_db()  # O'chirilgach bazani yangilash
                 deleted = True
                 break
         if deleted:
@@ -241,6 +266,8 @@ async def process_file(message: types.Message, state: FSMContext):
             "caption": caption,
             "message_id": sent_msg.message_id
         })
+        
+        save_db()  # Yangi fayl qo'shilganda bazaga saqlash
         
         await message.answer("✅ Material yopiq kanalga va botga muvaffaqiyatli saqlandi!")
         
